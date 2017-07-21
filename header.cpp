@@ -81,20 +81,20 @@ void Header::parse(const string& data) {
 	hmap_[KeyFormat(data.substr(0, pos))] = data.substr(pos+1);
 }
 
-void Header::ToString(string* ostr) {
+void Header::ToString(string* ostr, const string& spliter) {
 	ostr->clear();
 	std::map<string, string>::iterator it;
 	for(it = hmap_.begin(); it != hmap_.end(); ++it) {
 		ostr->append(it->first);
 		ostr->append(":");
 		ostr->append(it->second);
-		ostr->append(CRLF);
+		ostr->append(spliter);
 	}
 }
 
-string Header::ToString() {
+string Header::ToString(const string& spliter) {
 	string ostr;
-	ToString(&ostr);
+	ToString(&ostr, spliter);
 	return ostr;
 }
 

@@ -1,33 +1,51 @@
 #ifndef __UTIL_H__
 #define __UTIL_H__
 #include <string>
+#include "define.h"
 namespace http {
 
 inline void UpperChar(char& c);
 inline void LowerChar(char& c);
 std::string KeyFormat(std::string key);
+bool IsSpace(char c);
+const char* MethodStr(Method m);
 
 class Request;
 class Response;
+class Client;
 
 typedef void (*ContextRequestCleaner)(Request**);
 typedef void (*ContextArgCleaner)(void**);
 
 class Context {
 public:
-	Context(Request* req=NULL, void* parg=NULL, ContextRequestCleaner *crc=NULL, ContextArgCleaner *cac=NULL);
-	void SetRequest(Request* req, ContextRequestCleaner *crc=NULL);
-	void SetArg(void* parg, ContextArgCleaner *cac=NULL);
-	Request* GetRequest();
-	Response* GetResponse();
-	template<typename T> T* GetArg();
+	friend class Client;
+	Context(Request* req=NULL, void* parg=NULL, ContextRequestCleaner crc=NULL, ContextArgCleaner cac=NULL)
+		:request_(req), parg_(parg), crc_(crc), cac_(cac), response_(NULL) {}
+
+	~Context();
+
+	void SetRequest(Request* req, ContextRequestCleaner crc=NULL) {
+		request_ = req;
+		crc_ = crc;
+	}
+	void SetArg(void* parg, ContextArgCleaner cac=NULL) {
+		parg_ = parg;
+		cac_ = cac;
+	}
+	Request* GetRequest() {return request_;}
+	Response* GetResponse() {return response_;}
+	template<typename T> T* GetArg() {return reinterpret_cast<T*>(parg_);}
+private:
+	Response* allocResponse(bool write_body=true);
+	void freeResponse();
 private:
 	Request* request_;
 	Response* response_;
 	void* parg_;
 
-	ContextRequestCleaner* crc_;
-	ContextArgCleaner* cac_;
+	ContextRequestCleaner crc_;
+	ContextArgCleaner cac_;
 };
 
 class RequestReader {
@@ -38,20 +56,39 @@ public:
 
 class ResponseHandler {
 public:
-	ResponseHandler(Context* cxt=NULL);
-	virtual int Handle(Context* cxt) = 0;
-	virtual ~ResponseHandler(){}
+	friend class Client;
+	ResponseHandler(Context* cxt=NULL):cxt_(cxt){}
+	virtual size_t Handle(Context* cxt) = 0;
+	virtual ~ResponseHandler(){
+		if(cxt_!=NULL) delete cxt_;
+	}
+private:
+	Context* getContext(){
+		if(cxt_ == NULL)
+			cxt_ = new Context();
+		return cxt_;
+	}
 protected:
-	Context* cxt_;
+	Context* cxt_; //注意清理问题
 };
 
 class ResponseStreamHandler {
 public:
-	ResponseStreamHandler(Context* cxt=NULL);
-	virtual int Handle(Context* cxt, char* buffer, size_t size) = 0;
-	virtual ~ResponseStreamHandler(){}
+	friend class Client;
+	ResponseStreamHandler(Context* cxt=NULL):cxt_(cxt){}
+	virtual size_t Handle(Context* cxt, char* buffer, size_t size) = 0;
+	virtual ~ResponseStreamHandler(){
+		//httpclient_debug("ResponseStreamHandler clean context\n");
+		if(cxt_!=NULL) delete cxt_;
+	}
+private:
+	Context* getContext(){
+		if(cxt_ == NULL)
+			cxt_ = new Context();
+		return cxt_;
+	}
 protected:
-	Context* cxt_;
+	Context* cxt_; //注意清理问题
 };
 
 }

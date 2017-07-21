@@ -2,8 +2,11 @@
 #include <stdlib.h>
 #include <string.h>
 #include <string>
+#include <sstream>
 #include <curl/curl.h>
+#include "define.h"
 #include "request.h"
+#include "util.h"
 
 using namespace std;
 
@@ -72,7 +75,7 @@ void Request::setReadData() {
 		curl_easy_setopt(curl_handle_, CURLOPT_POSTFIELDSIZE, form_.size());
 	}
 	if(isReadData()) {
-		curl_easy_setopt(curl_handle_, CURLOPT_READFUNCTION, readFunc);
+		curl_easy_setopt(curl_handle_, CURLOPT_READFUNCTION, readCallback);
 		curl_easy_setopt(curl_handle_, CURLOPT_READDATA, this);
 	}
 	if(chunked_) {
@@ -80,7 +83,7 @@ void Request::setReadData() {
 	}
 }
 
-size_t Request::readFunc(char *buffer, size_t size, size_t nmemb, void *userp) {
+size_t Request::readCallback(char *buffer, size_t size, size_t nmemb, void *userp) {
 	Request* me = reinterpret_cast<Request*>(userp);
 	size_t n = size*nmemb;
 	if(!me->data_.empty()) {
@@ -97,7 +100,7 @@ size_t Request::readFunc(char *buffer, size_t size, size_t nmemb, void *userp) {
 	if(me->reader_ != NULL) {
 		return me->reader_->Read(buffer, n);
 	}
-	fprintf(stderr, "In request object %d, no data to read in readFunc\n", me);
+	fprintf(stderr, "In request object %d, no data to read in readCallback\n", me);
 	return 0;
 }
 
@@ -125,22 +128,30 @@ int Request::Prepare() {
 	case DELETE:
 		curl_easy_setopt(curl_handle_, CURLOPT_CUSTOMREQUEST, M_DELETE);
 		break;
-	default:
-		curl_easy_setopt(curl_handle_, CURLOPT_HTTPGET, 1L);
+	//default:
+		//curl_easy_setopt(curl_handle_, CURLOPT_HTTPGET, 1L);
 	}
 	//set headers
-	struct curl_slist *list = NULL;
-	string item;
-	for(Header::Iterator it = header_.Begin(); it != header_.End(); ++it) {
-		item.assign(it->first+":"+it->second);
-		list = curl_slist_append(list, item.c_str());
+	if(header_.ItemSize() > 0) {
+		struct curl_slist *list = NULL;
+		string item;
+		for(Header::Iterator it = header_.Begin(); it != header_.End(); ++it) {
+			item.assign(it->first+":"+it->second);
+			list = curl_slist_append(list, item.c_str());
+		}
+		curl_easy_setopt(curl_handle_, CURLOPT_HTTPHEADER, list);
+		curl_slist_free_all(list);
 	}
-	curl_easy_setopt(curl_handle_, CURLOPT_HTTPHEADER, list);
-	curl_slist_free_all(list);
 
 	code_ = CURLE_OK;
 	return code_;
 }
 
+string Request::ToString() {
+	ostringstream oss;
+	oss<<"{Method:"<<MethodStr(method_)<<" Url:"<<url_<<" Form:"<<form_
+		<<" Header:{"<<header_.ToString(", ")<<"} Body:"<<data_<<" }";
+	return oss.str();
+}
 
 }

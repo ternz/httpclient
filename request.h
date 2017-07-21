@@ -2,15 +2,18 @@
 #define __REQUEST_H__
 
 #include <string>
+#include <curl/curl.h>
 #include "define.h"
 #include "util.h"
 #include "header.h"
 
 namespace http {
 
+class Client;
 
 class Request {
 public:
+	friend class Client;
 	//Request(){}
 	Request(Method m, const std::string& url);
 	~Request();
@@ -55,10 +58,12 @@ public:
 
 	void Reset();
 
+	string ToString();
+
 private:
 	void setReadData();
 	bool isReadData();
-	static size_t readFunc(char *buffer, size_t size, size_t nmemb, void *userp);
+	static size_t readCallback(char *buffer, size_t size, size_t nmemb, void *userp);
 
 private:
 	Method method_;

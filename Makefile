@@ -2,7 +2,7 @@ FLAG=-g
 INCLUDE=.
 LIB_DIR=
 
-OBJ=util.o header.o request.o
+OBJ=util.o header.o request.o response.o client.o
 
 all: libhttpclient.a
 

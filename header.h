@@ -37,8 +37,8 @@ public:
 	Iterator Begin() {return hmap_.begin();}
 	Iterator End() {return hmap_.end();}
 
-	void ToString(string* ostr);
-	string ToString();
+	void ToString(string* ostr, const string& spliter=CRLF);
+	string ToString(const string& spliter=CRLF);
 
 	void Reset();
 
