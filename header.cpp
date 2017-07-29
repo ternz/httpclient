@@ -79,6 +79,7 @@ void Header::parse(const string& data) {
 	if(pos == string::npos)
 		return;
 	hmap_[KeyFormat(data.substr(0, pos))] = data.substr(pos+1);
+	//TODO:去掉前后空格
 }
 
 void Header::ToString(string* ostr, const string& spliter) {

@@ -1,4 +1,6 @@
 #include <string>
+#include <string.h>
+#include <errno.h>
 #include "util.h"
 #include "request.h"
 #include "response.h"
@@ -77,6 +79,35 @@ Response* Context::allocResponse(bool write_body) {
 void Context::freeResponse() {
 	if(response_ != NULL) 
 		delete response_;
+}
+
+const char* ClientErrStr(int code) {
+	switch(code) {
+	case CLIENT_OK:
+		return "OK";
+	case CLIENT_ERR_RESOURCE_INIT:
+		return "resource init failed";
+	case CLIENT_ERR_OUT_OF_MEMORY:
+		return "out of memory";
+	case CLIENT_ERR_AGAIN:
+		return "client resource temporarily unavaibale";
+	default:
+		return "unknown error";
+	}
+}
+
+const char* ErrStr(int code) {
+	if(is_easy_code(code)) {
+		return curl_easy_strerror((CURLcode)resolv_easy_code(code));
+	} else if(is_multi_code(code)) {
+		return curl_multi_strerror((CURLMcode)resolv_multi_code(code));
+	} else if(is_share_code(code)) {
+		return curl_share_strerror((CURLSHcode)resolv_share_code(code));
+	} else if(is_errno_code(code)) {
+		return strerror(resolv_errno_code(code));
+	} else {
+		return ClientErrStr(code);
+	}
 }
 
 }

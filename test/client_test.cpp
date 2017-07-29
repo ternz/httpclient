@@ -17,26 +17,26 @@ void TestClient(string url) {
 
 class RSHtest: public ResponseStreamHandler {
 public:
-	RSHtest(Context* cxt=NULL):ResponseStreamHandler(cxt), isPrintHeader(false) {}
-	size_t Handle(Context* cxt, char* buffer, size_t size) {
-		if(!isPrintHeader) {
-			cout<<"response header:\n"<<cxt->GetResponse()->GetHeader().ToString()<<endl;
-			cout<<"response body:"<<endl;
-			isPrintHeader = true;
-		}
+	RSHtest(Context* cxt=NULL):ResponseStreamHandler(cxt) {}
+	void HandleStart(Context* cxt) {
+		cout<<"response header:\n"<<cxt->GetResponse()->GetHeader().ToString()<<endl;
+		cout<<"response body:"<<endl;
+	}
+	size_t HandleStream(Context* cxt, char* buffer, size_t size) {
 		cout<<string(buffer, size);
 		return size;
 	}
-private:
-	bool isPrintHeader;
+	void HandleEnd(Context* cxt) {
+		cout<<"request end"<<endl;
+	}
 };
 
 void TestClientStream(string url) {
 	Request request(GET, url);
-	Client client;
+	Client client(1);
 	cout<<"request: "<<request.ToString()<<endl;
-	//ResponseStreamHandler* handler = new RSHtest();
-	int res = client.Sync(&request, new RSHtest());
+	int res = client.Async(&request, new RSHtest());
+	client.Wait(-1);
 	cout<<"res: "<<client.ErrStr(res)<<endl;
 }
 

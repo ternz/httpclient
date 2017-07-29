@@ -13,9 +13,73 @@ using namespace std;
 namespace http {
 
 Request::Request(Method m, const string& url)
-	:method_(m), code_(CURLE_OK), reader_(NULL), read_pos_(0), chunked_(false), read_size_(0) {
+	:method_(m), code_(CURLE_OK), curl_handle_(NULL), timeout_ms_(0)
+	,reader_(NULL), read_pos_(0), chunked_(false), read_size_(0) {
 	curl_handle_ = curl_easy_init();
 	SetUrl(url);
+}
+
+Request::Request() {
+	new (this)Request(GET, "");
+}
+
+Request::Request(const Request& req) {
+	method_ = req.method_;
+	url_ = req.url_;
+	header_ = req.header_;
+	form_ = req.form_;
+	timeout_ms_ = req.timeout_ms_;
+
+	data_ = req.data_;
+	read_pos_ = req.read_pos_;
+	//if(req.reader_ != NULL) {
+	//	reader_ = new RequestReader(*(req.reader_));
+	//} else {
+	//	reader_ = NULL;  //不知道reader_的具体类型，设为NULL
+	//}
+	if(req.reader_ == NULL) {
+		reader_ = NULL;
+	} else {
+		reader_ = req.reader_->Copy();
+	}
+	read_size_ = req.read_size_;
+	chunked_ = req.read_size_;
+
+	curl_handle_ = curl_easy_duphandle(req.curl_handle_);
+	code_ = req.code_;
+}
+	
+Request& Request::operator=(const Request& req) {
+	if(this != &req) {
+		RequestReader* tmp_reader = NULL;
+		if(req.reader_ != NULL) {
+			tmp_reader = req.reader_->Copy();
+		}
+		CURL* tmp_curl = NULL;
+		if(req.curl_handle_ != NULL) {
+			tmp_curl = curl_easy_duphandle(req.curl_handle_);
+		}
+		
+		//TODO: if alloc failed
+
+		if(reader_ != NULL) delete reader_;
+		reader_ = tmp_reader;
+
+		if(curl_handle_ != NULL) curl_easy_cleanup(curl_handle_);
+		curl_handle_ = tmp_curl;
+
+		method_ = req.method_;
+		url_ = req.url_;
+		header_ = req.header_;
+		form_ = req.form_;
+		timeout_ms_ = req.timeout_ms_;
+		data_ = req.data_;
+		read_pos_ = req.read_pos_;
+		read_size_ = req.read_size_;
+		chunked_ = req.read_size_;
+		code_ = req.code_;
+	}
+	return *this;
 }
 
 Request::~Request() {
@@ -28,6 +92,7 @@ Request::~Request() {
 }
 
 void Request::SetUrl(const std::string& url) {
+	//TODO: urlencode
 	size_t pos = url.find_first_of('?');
 	if(pos != string::npos) {
 		url_ = url.substr(0, pos);
@@ -112,6 +177,8 @@ int Request::Prepare() {
 			return code_;
 		}
 	}
+	curl_easy_reset(curl_handle_);
+
 	curl_easy_setopt(curl_handle_, CURLOPT_URL, url_.c_str());
 	switch(method_) {
 	case HEAD:
@@ -131,6 +198,14 @@ int Request::Prepare() {
 	//default:
 		//curl_easy_setopt(curl_handle_, CURLOPT_HTTPGET, 1L);
 	}
+
+	//set timeout
+	if(timeout_ms_ > 0)
+		curl_easy_setopt(curl_handle_, CURLOPT_TIMEOUT, timeout_ms_);
+
+	//no signal
+	curl_easy_setopt(curl_handle_, CURLOPT_NOSIGNAL, 1L);
+
 	//set headers
 	if(header_.ItemSize() > 0) {
 		struct curl_slist *list = NULL;

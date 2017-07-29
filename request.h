@@ -14,8 +14,10 @@ class Client;
 class Request {
 public:
 	friend class Client;
-	//Request(){}
+	Request();
 	Request(Method m, const std::string& url);
+	Request(const Request& req);
+	Request& operator=(const Request& req);
 	~Request();
 
 	void SetMethod(Method m) {method_ = m;}
@@ -24,6 +26,8 @@ public:
 	void SetUrl(const std::string& url);
 	std::string GetUrl() {return url_;}
 	std::string GetQuery() {return form_;}
+
+	void SetTimeoutMs(int timeout_ms) {timeout_ms_ = timeout_ms;}
 
 	void SetFormParameter(const std::string& key, const std::string& value);
 
@@ -70,6 +74,7 @@ private:
 	std::string url_;
 	Header header_;
 	string form_;
+	int timeout_ms_;
 
 	string data_;  //data比request reader优先
 	size_t read_pos_;

@@ -22,6 +22,10 @@ public:
 		return  header_.Key(key);
 	}
 
+	std::string GetVersion() {return http_version_;}
+	int GetStatusCode() {return status_code_;}
+	std::string GetReasonPhrase() {return reason_phrase_;}
+
 	size_t ContentLength();
 	std::string ContentType();
 

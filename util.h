@@ -9,6 +9,8 @@ inline void LowerChar(char& c);
 std::string KeyFormat(std::string key);
 bool IsSpace(char c);
 const char* MethodStr(Method m);
+const char* ClientErrStr(int code);
+const char* ErrStr(int code);
 
 class Request;
 class Response;
@@ -51,6 +53,7 @@ private:
 class RequestReader {
 public:
 	virtual size_t Read(char* buffer, size_t size) = 0;
+	virtual RequestReader* Copy() {return NULL;}
 	virtual ~RequestReader(){}
 };
 
@@ -58,11 +61,12 @@ class ResponseHandler {
 public:
 	friend class Client;
 	ResponseHandler(Context* cxt=NULL):cxt_(cxt){}
-	virtual size_t Handle(Context* cxt) = 0;
+	virtual void Handle(Context* cxt) = 0;
+	virtual void HandleTimeout(Context* cxt){}
 	virtual ~ResponseHandler(){
 		if(cxt_!=NULL) delete cxt_;
 	}
-private:
+protected:
 	Context* getContext(){
 		if(cxt_ == NULL)
 			cxt_ = new Context();
@@ -75,13 +79,16 @@ protected:
 class ResponseStreamHandler {
 public:
 	friend class Client;
-	ResponseStreamHandler(Context* cxt=NULL):cxt_(cxt){}
-	virtual size_t Handle(Context* cxt, char* buffer, size_t size) = 0;
+	ResponseStreamHandler(Context* cxt=NULL):cxt_(cxt),is_first_exec_(true){}
+	virtual void HandleStart(Context* cxt){}
+	virtual size_t HandleStream(Context* cxt, char* buffer, size_t size) = 0;
+	virtual void HandleEnd(Context* cxt){}
+	virtual void HandleTimeout(Context* cxt){}
 	virtual ~ResponseStreamHandler(){
 		//httpclient_debug("ResponseStreamHandler clean context\n");
 		if(cxt_!=NULL) delete cxt_;
 	}
-private:
+protected:
 	Context* getContext(){
 		if(cxt_ == NULL)
 			cxt_ = new Context();
@@ -89,6 +96,8 @@ private:
 	}
 protected:
 	Context* cxt_; //注意清理问题
+private:
+	bool is_first_exec_;
 };
 
 }
