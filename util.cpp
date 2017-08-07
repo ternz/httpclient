@@ -91,6 +91,12 @@ const char* ClientErrStr(int code) {
 		return "out of memory";
 	case CLIENT_ERR_AGAIN:
 		return "client resource temporarily unavaibale";
+	case CLIENT_ERR_REQUEST_EXIST:
+		return "request already exist";
+	case CLIENT_ERR_INVALID_PARAMTER:
+		return "invalid paramter";
+	case CLIENT_ERR_STOP:
+		return "client has stop";
 	default:
 		return "unknown error";
 	}

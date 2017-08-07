@@ -38,7 +38,13 @@ namespace http {
 #define CLIENT_ERR_RESOURCE_INIT 1
 #define CLIENT_ERR_OUT_OF_MEMORY 2
 #define CLIENT_ERR_AGAIN 3
+#define CLIENT_ERR_REQUEST_EXIST 4
+#define CLIENT_ERR_INVALID_PARAMTER 5
+#define CLIENT_ERR_STOP 6
 #define CLIENT_OPT_TIMEOUT easy_code(CURLE_OPERATION_TIMEDOUT)
+
+#define CLIENT_WAIT_FOR_AVAILABLE 0
+#define CLIENT_WAIT_FOR_DONE -1
 
 #define easy_error_code(code) ((code)==CURLE_OK ? CLIENT_OK : easy_code(code))
 #define mutil_error_code(code) ((code)==CURLM_OK ? CLIENT_OK : multi_code(code))

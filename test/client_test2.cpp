@@ -1,3 +1,4 @@
+#include <stdlib.h>
 #include <iostream>
 #include <string>
 #include <sys/time.h>
@@ -33,6 +34,9 @@ public:
 	void HandleEnd(Context* cxt) {
 		//cout<<"request "<<cxt->GetRequest()->GetUrl()<<" end "<<cxt->GetResponse()->GetStatusCode()<<endl;
 	}
+	void HandleTimeout(Context* cxt) {
+		cout<<"request "<<cxt->GetRequest()->GetUrl()<<" timeout"<<endl;
+	}
 };
 
 void delete_request(Request** req) {
@@ -65,13 +69,20 @@ void TestAsync(Client* client) {
 			res = client->Async(req, 
 					new RSHtest(new Context(req, NULL, delete_request, NULL)));
 			//	client->Wait(0);
+			if(res == CLIENT_ERR_AGAIN) {
+				res = client->Wait(CLIENT_WAIT_FOR_AVAILABLE);
+				--i;
+			}
 			if(res != CLIENT_OK) {
-				cout<<"client Async error:"<<ErrStr(res)<<endl;
+				cout<<"client error:"<<ErrStr(res)<<endl;
 			}
 		}
 		//usleep(50000);
 	}
-	client->Wait(-1);
+	res = client->Wait(CLIENT_WAIT_FOR_DONE);
+	if(res != CLIENT_OK) {
+		cout<<"client Wait error:"<<ErrStr(res)<<endl;
+	}
 	gettimeofday(&tv_end, NULL);
 	cout<<"Async all request finished in "
 		<<(tv_end.tv_sec - tv_start.tv_sec) + (tv_end.tv_usec - tv_start.tv_usec)/1000000.0
@@ -80,10 +91,13 @@ void TestAsync(Client* client) {
 
 int main(int argc, char* argv[]) {
 	Client client(1);
+	if(argc == 2)
+		client.SetMaxConcurrence(atoi(argv[1]));
 	for(int i=0; i<CNT; ++i) {
 		requests[i].SetUrl(urls[i]);
+		requests[i].SetTimeout(300);
 	}
-	TestSync(&client);
+	//TestSync(&client);
 	TestAsync(&client);
 	return 0;
 }

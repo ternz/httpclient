@@ -174,3 +174,8 @@ virtual ~DataReader(){}
 GlodbalObject类
 自动调用curl_global_init(CURL_GLOBAL_ALL)和curl_global_cleanup()
 CURL_GLOBAL_SSL
+
+使用时要注意的问题：
+1. 不能给Clinet的Async成员函数传递重复的request指针，否则会造成程序崩溃。
+2. 注意各个动态分配的对象的清理，根据实际情况给Async传递是否需要Client为你自动清理handler；根据实际情况给Context设置清理函数。
+3. handler的回调函数并不是线程安全的，使用共享变量时注意上锁。

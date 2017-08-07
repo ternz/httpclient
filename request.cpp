@@ -201,10 +201,12 @@ int Request::Prepare() {
 
 	//set timeout
 	if(timeout_ms_ > 0)
-		curl_easy_setopt(curl_handle_, CURLOPT_TIMEOUT, timeout_ms_);
+		curl_easy_setopt(curl_handle_, CURLOPT_TIMEOUT_MS, timeout_ms_);
 
 	//no signal
 	curl_easy_setopt(curl_handle_, CURLOPT_NOSIGNAL, 1L);
+
+	//curl_easy_setopt(curl_handle_, CURLOPT_FORBID_REUSE, 1L);
 
 	//set headers
 	if(header_.ItemSize() > 0) {

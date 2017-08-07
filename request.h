@@ -27,6 +27,7 @@ public:
 	std::string GetUrl() {return url_;}
 	std::string GetQuery() {return form_;}
 
+	void SetTimeout(int timeout_s) {timeout_ms_ = timeout_s * 1000;}  //TODO:overflow?
 	void SetTimeoutMs(int timeout_ms) {timeout_ms_ = timeout_ms;}
 
 	void SetFormParameter(const std::string& key, const std::string& value);
