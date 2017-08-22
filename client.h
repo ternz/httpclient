@@ -35,6 +35,7 @@ public:
 	Client(unsigned short workers=0);
 	~Client();
 	int Init();
+	void BindWorkersData(void* data[]); //指针数据，长度必须跟设置的worker数相等
 	int Sync(Request* req, Response* rsp);
 	int Sync(Request* req, ResponseStreamHandler* handler, bool cleanUpHandler=true);
 	int Async(Request* req, ResponseHandler* handler, bool cleanUpHandler=true);  //不能在未确定request完成前再次使用同样的request参数调用Async
@@ -49,8 +50,10 @@ public:
 	const char* ErrStr();
 	int ErrCode();
 
-private:
-	class SyncWorker;
+public:
+	friend class ResponseHandler;
+	friend class ResponseStreamHandler;
+	class AsyncWorker;
 
 private:
 	Client(Client& c); //disable copy
@@ -78,7 +81,7 @@ private:
 	unsigned short workers_;
 	CURLM* curl_multi_;
 	int* pipefds_;
-	SyncWorker** sync_workers_;
+	AsyncWorker** sync_workers_;
 	int worker_idx_;
 	std::map<CURL*, PipeData*> handle_map_;
 
@@ -97,6 +100,49 @@ private:
 #define pipe_rfd(i) pipefds_[(i)*2]
 #define pipe_wfd(i) pipefds_[(i)*2+1]
 	
+};
+
+class Client::AsyncWorker {
+public:
+	AsyncWorker(Client* client, int rfd);
+	~AsyncWorker();
+	//int DoRequest(PipeData* pd);
+	
+	int Start();
+	int Join();
+	void Stop();
+
+	int Follow(Request* req, ResponseHandler* handler, bool cleanUpHandler=true);  
+	int Follow(Request* req, ResponseStreamHandler* handler, bool cleanUpHandler=true);
+
+	void SetWaitMs(int time_ms) {wait_ms_ = time_ms;}
+
+	int GetRunningNum() {
+		return running_num_;  //加锁没有意义，不需要加锁
+	}
+
+	void SetBindData(void* data) {bind_data_ = data;}
+
+private:
+	static void* threadFunc(void* arg);
+	//void addHandle(CURL* e, PipeData* pd);
+	//void removeHandle(CURL* e);
+
+private:
+	static const int DEFAULT_WAIT_MS = 50;
+
+	Client* client_;
+	int pipe_rfd_;
+	bool run_;
+	pthread_t thread_id_;
+	CURLM* curl_multi_;
+	int wait_ms_;
+	int running_num_;
+	bool joined_;
+
+	std::map<CURL*, PipeData*> handle_map_;
+
+	void* bind_data_; //TODO:确定在哪释放
 };
 
 }

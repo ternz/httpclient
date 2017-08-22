@@ -11,6 +11,7 @@
 #include "response.h"
 #include "util.h"
 #include "client.h"
+#include "global.h"
 
 using namespace std;
 
@@ -48,49 +49,14 @@ void freePipeDataAndHandler(PipeData* pd) {
 	delete pd;
 }
 
-class Client::SyncWorker {
-public:
-	SyncWorker(Client* client, int rfd);
-	~SyncWorker();
-	//int DoRequest(PipeData* pd);
-	
-	int Start();
-	int Join();
-	void Stop();
 
-	void SetWaitMs(int time_ms) {wait_ms_ = time_ms;}
-
-	int GetRunningNum() {
-		return running_num_;  //加锁没有意义，不需要加锁
-	}
-
-private:
-	static void* threadFunc(void* arg);
-	//void addHandle(CURL* e, PipeData* pd);
-	//void removeHandle(CURL* e);
-
-private:
-	static const int DEFAULT_WAIT_MS = 50;
-
-	Client* client_;
-	int pipe_rfd_;
-	bool run_;
-	pthread_t thread_id_;
-	CURLM* curl_multi_;
-	int wait_ms_;
-	int running_num_;
-	bool joined_;
-
-	map<CURL*, PipeData*> handle_map_;
-};
-
-Client::SyncWorker::SyncWorker(Client* client, int rfd)
+Client::AsyncWorker::AsyncWorker(Client* client, int rfd)
 	:client_(client), pipe_rfd_(rfd), run_(false), thread_id_(-1), curl_multi_(NULL)
-	,wait_ms_(DEFAULT_WAIT_MS), running_num_(0), joined_(false) {
+	,wait_ms_(DEFAULT_WAIT_MS), running_num_(0), joined_(false),bind_data_(NULL) {
 
 }
 
-Client::SyncWorker::~SyncWorker() {
+Client::AsyncWorker::~AsyncWorker() {
 	//TODO:join or stop?
 	if(curl_multi_ != NULL) {
 		map<CURL*, PipeData*>::iterator it = handle_map_.begin();
@@ -103,7 +69,7 @@ Client::SyncWorker::~SyncWorker() {
 	//close(pipe_rfd_);
 }
 
-int Client::SyncWorker::Start() {
+int Client::AsyncWorker::Start() {
 	if(run_) return CLIENT_OK;
 
 	if(curl_multi_ == NULL) {
@@ -124,7 +90,7 @@ int Client::SyncWorker::Start() {
 	return CLIENT_OK;
 }
 
-int Client::SyncWorker::Join() {
+int Client::AsyncWorker::Join() {
 	joined_ = true;
 	if(thread_id_ != -1) {
 		int res = pthread_join(thread_id_, NULL);
@@ -135,13 +101,67 @@ int Client::SyncWorker::Join() {
 	return CLIENT_OK;
 }
 
-void Client::SyncWorker::Stop() {
+void Client::AsyncWorker::Stop() {
 	//TODO:join?
 	run_ = false;
 }
 
-void* Client::SyncWorker::threadFunc(void* arg) {
-	SyncWorker* me = reinterpret_cast<SyncWorker*>(arg);
+int Client::AsyncWorker::Follow(Request* req, ResponseHandler* handler, bool cleanUpHandler) {
+	int res;
+	res = req->Prepare();
+	if(res != CURLE_OK) 
+		return easy_code(res);
+
+	Context* cxt = handler->getContext();
+	Response* rsp = cxt->allocResponse(true);
+	curl_easy_setopt(req->curl_handle_, CURLOPT_HEADERFUNCTION, rsp->headerCallback);
+	curl_easy_setopt(req->curl_handle_, CURLOPT_HEADERDATA, rsp);
+	curl_easy_setopt(req->curl_handle_, CURLOPT_WRITEFUNCTION, rsp->writeCallback);
+	curl_easy_setopt(req->curl_handle_, CURLOPT_WRITEDATA, rsp);
+
+	handler->setBindData(bind_data_);
+	handler->setWorker(this);
+
+	PipeData* pd = newPipeData(req, PipeData::nonstream, handler, cleanUpHandler);
+
+	res = addHandler(curl_multi_, handle_map_, req->curl_handle_, pd);
+	if(res != CLIENT_OK) {
+		//TODO:handler error
+		httpclient_error("add handle failed: %s\n", ErrStr(res));
+	}
+	client_->increaseConcurrence();
+	return res;
+}
+
+int Client::AsyncWorker::Follow(Request* req, ResponseStreamHandler* handler, bool cleanUpHandler) {
+	int res;
+	res = req->Prepare();
+	if(res != CURLE_OK) 
+		return easy_code(res);
+
+	Context* cxt = handler->getContext();
+	Response* rsp = cxt->allocResponse(true);
+	curl_easy_setopt(req->curl_handle_, CURLOPT_HEADERFUNCTION, rsp->headerCallback);
+	curl_easy_setopt(req->curl_handle_, CURLOPT_HEADERDATA, rsp);
+	curl_easy_setopt(req->curl_handle_, CURLOPT_WRITEFUNCTION, client_->streamWriteCallback);
+	curl_easy_setopt(req->curl_handle_, CURLOPT_WRITEDATA, rsp);
+
+	handler->setBindData(bind_data_);
+	handler->setWorker(this);
+
+	PipeData* pd = newPipeData(req, PipeData::stream, handler, cleanUpHandler);
+
+	res = addHandler(curl_multi_, handle_map_, req->curl_handle_, pd);
+	if(res != CLIENT_OK) {
+		//TODO:handler error
+		httpclient_error("add handle failed: %s\n", ErrStr(res));
+	}
+	client_->increaseConcurrence();
+	return res;
+}
+
+void* Client::AsyncWorker::threadFunc(void* arg) {
+	AsyncWorker* me = reinterpret_cast<AsyncWorker*>(arg);
 	struct curl_waitfd pipe_fd;
 	pipe_fd.fd = me->pipe_rfd_;
 	pipe_fd.events = CURL_WAIT_POLLIN;
@@ -182,6 +202,16 @@ void* Client::SyncWorker::threadFunc(void* arg) {
 				} else {
 					//TODO:res != PTR_SIZE?
 					//me->addHandle(e, data);
+					switch(data->handlerType) {
+						case PipeData::nonstream:
+							data->handler.nonstream->setBindData(me->bind_data_);
+							data->handler.nonstream->setWorker(me);
+							break;
+						case PipeData::stream:
+							data->handler.stream->setBindData(me->bind_data_);
+							data->handler.stream->setWorker(me);
+							break;
+					}
 					res = addHandler(me->curl_multi_, me->handle_map_, data->request->curl_handle_, data);
 					if(res != CLIENT_OK) {
 						//TODO:handler error
@@ -236,7 +266,7 @@ void* Client::SyncWorker::threadFunc(void* arg) {
 	}
 }
 
-/*void Client::SyncWorker::addHandle(CURL* e, PipeData* pd) {
+/*void Client::AsyncWorker::addHandle(CURL* e, PipeData* pd) {
 	pair<map<CURL*, PipeData*>::iterator, bool> ret;
 	ret = handle_map_.insert(pair<CURL*, PipeData*>(e, pd));
 	if(ret.second) {
@@ -253,7 +283,7 @@ void* Client::SyncWorker::threadFunc(void* arg) {
 	}
 }
 
-void Client::SyncWorker::removeHandle(CURL* e) {
+void Client::AsyncWorker::removeHandle(CURL* e) {
 	int res = curl_multi_remove_handle(curl_multi_, e);
 	if(res != CURLM_OK) {
 		httpclient_error("curl_multi_remove_handle error: %s\n", curl_multi_strerror(res));
@@ -347,6 +377,9 @@ Client::~Client() {
 }
 
 int Client::Init() {
+	extern GlobalObject object;
+	object.Init();
+
 	if(is_init_) return CLIENT_OK;
 
 	if(workers_ == 0) {
@@ -366,7 +399,7 @@ int Client::Init() {
 			pipefds_[i] = -1;
 		}
 
-		sync_workers_ = new SyncWorker*[workers_];
+		sync_workers_ = new AsyncWorker*[workers_];
 		if(sync_workers_ == NULL)
 			return CLIENT_ERR_OUT_OF_MEMORY;
 		for(int i=0; i<workers_; ++i) {
@@ -379,7 +412,7 @@ int Client::Init() {
 		}
 
 		for(int i=0; i<workers_; ++i) {
-			sync_workers_[i] = new SyncWorker(this, pipe_rfd(i));
+			sync_workers_[i] = new AsyncWorker(this, pipe_rfd(i));
 			if(sync_workers_[i] == NULL) 
 				return CLIENT_ERR_OUT_OF_MEMORY;
 			int res = sync_workers_[i]->Start();
@@ -392,6 +425,12 @@ int Client::Init() {
 
 	is_init_ = true;
 	return CLIENT_OK;
+}
+
+void Client::BindWorkersData(void* data[]) {
+	for(int i=0; i<workers_; ++i) {
+		sync_workers_[i]->SetBindData(data[i]);
+	}
 }
 
 int Client::Sync(Request* req, Response* rsp) {

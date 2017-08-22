@@ -44,7 +44,7 @@ public:
 		//read_size_ = size;
 	}
 
-	void SetData(string& data, bool chunked=false) {
+	void SetData(const string& data, bool chunked=false) {
 		data_ = data; 
 		read_pos_ = 0;
 		chunked_ = chunked;

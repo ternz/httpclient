@@ -23,9 +23,12 @@ public:
 		//httpclient_debug("curl global cleanup\n");
 		curl_global_cleanup();
 	}
+	void Init() {
+		//void function
+	}
 };
 
-GlobalObject object;
+extern GlobalObject object;
 
 }
 

@@ -2,6 +2,7 @@
 #define __UTIL_H__
 #include <string>
 #include "define.h"
+#include "client.h"
 namespace http {
 
 inline void UpperChar(char& c);
@@ -60,7 +61,8 @@ public:
 class ResponseHandler {
 public:
 	friend class Client;
-	ResponseHandler(Context* cxt=NULL):cxt_(cxt){}
+	//friend class Client::AsyncWorker;
+	ResponseHandler(Context* cxt=NULL):cxt_(cxt),bind_data_(NULL),worker_(NULL){}
 	virtual void Handle(Context* cxt) = 0;
 	virtual void HandleTimeout(Context* cxt){}
 	virtual ~ResponseHandler(){
@@ -72,33 +74,53 @@ protected:
 			cxt_ = new Context();
 		return cxt_;
 	}
+	void setBindData(void* data) {bind_data_ = data;}
+	void* getBindData() {return bind_data_;} 
+	void setWorker(Client::AsyncWorker* worker) {worker_ = worker;}
+	Client::AsyncWorker* getWorker() {return worker_;}
+	//TODO:如果在单线程异步模式下在handler内发起另一个request, 添加set get client
 protected:
 	Context* cxt_; //注意清理问题
+	void* bind_data_;
+	Client::AsyncWorker* worker_;
 };
 
 class ResponseStreamHandler {
 public:
 	friend class Client;
-	ResponseStreamHandler(Context* cxt=NULL):cxt_(cxt),is_first_exec_(true){}
+	//friend class Client::AsyncWorker;
+	ResponseStreamHandler(Context* cxt=NULL):cxt_(cxt),is_first_exec_(true),bind_data_(NULL),worker_(NULL){}
 	virtual void HandleStart(Context* cxt){}
 	virtual size_t HandleStream(Context* cxt, char* buffer, size_t size) = 0;
 	virtual void HandleEnd(Context* cxt){}
 	virtual void HandleTimeout(Context* cxt){}
+
 	virtual ~ResponseStreamHandler(){
 		//httpclient_debug("ResponseStreamHandler clean context\n");
 		if(cxt_!=NULL) delete cxt_;
 	}
+	
 protected:
 	Context* getContext(){
 		if(cxt_ == NULL)
 			cxt_ = new Context();
 		return cxt_;
 	}
+	void setBindData(void* data) {bind_data_ = data;}
+	void* getBindData() {return bind_data_;} 
+	void setWorker(Client::AsyncWorker* worker) {worker_ = worker;}
+	Client::AsyncWorker* getWorker() {return worker_;}
+
 protected:
 	Context* cxt_; //注意清理问题
+	void* bind_data_;
+	Client::AsyncWorker* worker_;
+
 private:
 	bool is_first_exec_;
 };
+
+void common_request_deleter(Request** req);
 
 }
 #endif

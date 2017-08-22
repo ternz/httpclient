@@ -116,4 +116,8 @@ const char* ErrStr(int code) {
 	}
 }
 
+void common_request_deleter(Request** req) {
+	delete *req;
+}
+
 }
